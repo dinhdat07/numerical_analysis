@@ -52,18 +52,20 @@ def generate_random_state_sym():
     return state
 
 # Use
-# state = generate_random_state_sym()
-# print("Initial state:", state)
+state = generate_random_state()
+print("Initial state:", state)
 #Run okay:
 # Initial state: [-1.44332343  0.         -0.24852747 -0.36869087  1.44332343  0.
 #  -0.24852747 -0.36869087  0.          0.          0.49705494  0.73738173]
+# Initial state: [-1.14591565  0.         -0.22081826 -0.15568209  1.14591565  0.
+#  -0.22081826 -0.15568209  0.          0.          0.44163652  0.31136418]
 
 # 8-figure
-state = np.array([
-     0.97000436, -0.24308753, -0.46620368, -0.43236573,  
-    -0.97000436,  0.24308753, -0.46620368, -0.43236573,  
-     0.0,          0.0,         0.93240737,  0.86473146  
-], dtype=np.float64)
+# state = np.array([
+#      0.97000436, -0.24308753, -0.46620368, -0.43236573,  
+#     -0.97000436,  0.24308753, -0.46620368, -0.43236573,  
+#      0.0,          0.0,         0.93240737,  0.86473146  
+# ], dtype=np.float64)
 
 
 # lagrange
@@ -84,19 +86,19 @@ state = np.array([
 
 
 # yin-yang
-# state = np.array([
-#     -1.0, 0.0,       0.513938,  0.304736,   # Body 1
-#      1.0, 0.0,       0.513938,  0.304736,   # Body 2
-#      0.0, 0.0,      -1.027876, -0.609472    # Body 3
-# ])
+state = np.array([
+    -1.0, 0.0,       0.513938,  0.304736,   # Body 1
+     1.0, 0.0,       0.513938,  0.304736,   # Body 2
+     0.0, 0.0,      -1.027876, -0.609472    # Body 3
+])
 
 
 #dragon-fly
-state = np.array([
-    -1.0, 0.0,        0.080584,  0.588836,     # Body 1
-     1.0, 0.0,        0.080584,  0.588836,     # Body 2
-     0.0, 0.0,       -0.161168, -1.177672      # Body 3
-])
+# state = np.array([
+#     -1.0, 0.0,        0.080584,  0.588836,     # Body 1
+#      1.0, 0.0,        0.080584,  0.588836,     # Body 2
+#      0.0, 0.0,       -0.161168, -1.177672      # Body 3
+# ])
 
 
 
@@ -243,10 +245,10 @@ def update(frame):
 
 ani = FuncAnimation(
     fig, update,
-    frames=range(0, num_steps, 300),  # ← nhảy từng 3 frame (nhanh gấp ~3 lần)
+    frames=range(0, num_steps, 300), 
     init_func=init,
     blit=True,
-    interval=10,  # có thể giảm thêm nếu muốn nhanh nữa
+    interval=10, 
     repeat=True
 )
 
