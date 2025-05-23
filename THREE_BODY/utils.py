@@ -27,6 +27,28 @@ def derivatives(state):
         vx3, vy3, a3x, a3y
     ])
 
+def derivatives_3D(state):
+    x1, y1, z1, vx1, vy1, vz1 = state[0:6]
+    x2, y2, z2, vx2, vy2, vz2 = state[6:12]
+    x3, y3, z3, vx3, vy3, vz3 = state[12:18]
+
+    r12 = np.linalg.norm([x2 - x1, y2 - y1, z2 - z1])
+    r13 = np.linalg.norm([x3 - x1, y3 - y1, z3 - z1])
+    r23 = np.linalg.norm([x3 - x2, y3 - y2, z3 - z2])
+
+    a1 = G * m2 * (np.array([x2, y2, z2]) - np.array([x1, y1, z1])) / r12**3 \
+       + G * m3 * (np.array([x3, y3, z3]) - np.array([x1, y1, z1])) / r13**3
+    a2 = G * m1 * (np.array([x1, y1, z1]) - np.array([x2, y2, z2])) / r12**3 \
+       + G * m3 * (np.array([x3, y3, z3]) - np.array([x2, y2, z2])) / r23**3
+    a3 = G * m1 * (np.array([x1, y1, z1]) - np.array([x3, y3, z3])) / r13**3 \
+       + G * m2 * (np.array([x2, y2, z2]) - np.array([x3, y3, z3])) / r23**3
+
+    return np.concatenate([
+        [vx1, vy1, vz1], a1,
+        [vx2, vy2, vz2], a2,
+        [vx3, vy3, vz3], a3
+    ])
+
 def compute_energy(pos, vel):
     x1, y1 = pos[0]
     x2, y2 = pos[1]
@@ -69,3 +91,12 @@ def rk6_step(state, dt):
     k6 = derivatives(state + dt * (-3*k1 + 2*k2 + 12*k3 - 12*k4 + 8*k5) / 7)
 
     return state + dt / 90 * (7*k1 + 32*k3 + 12*k4 + 32*k5 + 7*k6)
+
+def rk6_step_3D(state, dt):
+    k1 = derivatives_3D(state)
+    k2 = derivatives_3D(state + dt * k1 / 4)
+    k3 = derivatives_3D(state + dt * (k1 + k2) / 8)
+    k4 = derivatives_3D(state + dt * (-0.5 * k2 + k3))
+    k5 = derivatives_3D(state + dt * (3 * k1 + 9 * k4) / 16)
+    k6 = derivatives_3D(state + dt * (-3 * k1 + 2 * k2 + 12 * k3 - 12 * k4 + 8 * k5) / 7)
+    return state + dt / 90 * (7 * k1 + 32 * k3 + 12 * k4 + 32 * k5 + 7 * k6)
