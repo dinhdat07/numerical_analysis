@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from utils import rk6_step, compute_energy
+from utils import rk6_step, rk4_step, rk54_step, rk45_step, compute_energy
 import tkinter as tk
 from tkinter import ttk
 from threading import Thread
@@ -12,25 +12,88 @@ G = 1.0
 dt = 0.0001
 num_steps = 300000
 
-positions = np.zeros((num_steps, 3, 2))
+rk_methods = {
+    "rk4": rk4_step,
+    "rk6": rk6_step,
+    "rk45": rk45_step,
+    "rk54": rk54_step
+}
+
+positions = None
+times = None
+result = {"next": "exit"}
+is_adaptive = False
 
 def run_simulation(state):
-    result = {"next": "exit"}
+    def compute_simulation(method="rk6", dt=0.0001, num_steps=300000):
+        global positions, times, is_adaptive
+        rk_step = rk_methods.get(method)
+        if rk_step is None:
+            raise ValueError(f"Method '{method}' is invalid. Please choose: {list(rk_methods.keys())}")
 
-    def compute_simulation():
-        for i in range(num_steps):
-            positions[i, 0] = state[0:2]
-            positions[i, 1] = state[4:6]
-            positions[i, 2] = state[8:10]
-            state[:] = rk6_step(state, dt)
-            if i % 3000 == 0:
-                progress_var.set(i / num_steps * 100)
-                loading.update_idletasks()
-        loading.after(100, on_finish_simulation)  
+        if method in ["rk45", "rk54"]:
+            is_adaptive = True
+            adaptive_integrator(rk_step, t0=0, t_end=dt * num_steps, dt_init=dt)
+        else:
+            positions = np.zeros((num_steps, 3, 2))
+            for i in range(num_steps):
+                positions[i, 0] = state[0:2]
+                positions[i, 1] = state[4:6]
+                positions[i, 2] = state[8:10]
+                state[:] = rk_step(state, dt)
+
+                if i % 3000 == 0:
+                    percent = i / num_steps * 100
+                    update_progress(percent)
+
+        loading.after(100, on_finish_simulation)
+
+    def adaptive_integrator(rk_step, t0, t_end, dt_init, tol=1e-6, dt_min=1e-5, dt_max=0.1, record_dt=0.0001):
+        global positions, times
+        t, dt = t0, dt_init
+        next_record_time = t0
+        adaptive_positions, adaptive_times = [], []
+
+        while t < t_end:
+            dt = min(dt, t_end - t)
+            y_high, y_low = rk_step(state, dt)
+            R = np.linalg.norm(y_high - y_low) / dt
+
+            if R <= tol or dt <= dt_min:
+                t += dt
+                state[:] = y_high
+                while next_record_time <= t:
+                    interp = (next_record_time - (t - dt)) / dt
+                    y_interp = (1 - interp) * state + interp * y_high
+                    adaptive_positions.append([y_interp[0:2], y_interp[4:6], y_interp[8:10]])
+                    adaptive_times.append(next_record_time)
+                    next_record_time += record_dt
+
+            delta = 0.84 * (tol / R) ** 0.25 if R > 0 else 4
+            dt *= min(max(delta, 0.1), 4)
+            dt = max(dt_min, min(dt, dt_max))
+            if dt <= dt_min:
+                print(dt)
+
+            if dt < dt_min and R > tol:
+                print("Minimum dt exceeded, stopping.")
+                break
+
+            percent = t / t_end * 100
+            update_progress(percent)
+
+        positions = np.array(adaptive_positions)
+        times = np.array(adaptive_times)
 
     def on_finish_simulation():
         loading.destroy()
-        show_animation()  
+        show_animation()
+
+    def update_progress(percent):
+        loading.after(0, lambda: (
+            progress_var.set(percent),
+            loading.update_idletasks()
+        ))
 
     def show_animation():
         fig, ax = plt.subplots(figsize=(8, 8))
@@ -44,6 +107,8 @@ def run_simulation(state):
         ax.set_ylim(-2, 2)
         ax.set_aspect('equal')
         ax.set_title("Three-Body Problem")
+        step = max(1, len(positions) // 1000)
+        print(f"Total frames: {len(positions)}, Step: {step}")
 
         def init():
             for line, dot in zip(lines, dots):
@@ -84,17 +149,25 @@ def run_simulation(state):
                 ax.set_title("Collision detected!", color='red')
                 fig.canvas.draw_idle()
                 return update_lines_and_dots(frame) + [energy_text]
+            
 
-            if frame % 300 == 0:
-                velocities = (positions[frame] - positions[frame - 1]) / dt
+            if frame > 0 and frame % step == 0:
+                if is_adaptive:
+                    dt_real = times[frame] - times[frame - 1]
+                else:
+                    dt_real = dt
+                velocities = (positions[frame] - positions[frame - 1]) / dt_real
                 energy = compute_energy(current_positions, velocities)
                 energy_text.set_text(f"Energy: {energy:.6f}")
 
             return update_lines_and_dots(frame) + [energy_text]
-
-        ani = FuncAnimation(fig, update, frames=range(0, num_steps, 300),
+        
+        
+        ani = FuncAnimation(fig, update, frames=range(0, len(positions), step),
                             init_func=init, blit=True, interval=10, repeat=True)
         
+        
+        # Add a back button to return to the choose state screen
         def on_back(event=None):
             result["next"] = "replay"
             plt.close(fig)
@@ -140,7 +213,7 @@ def run_simulation(state):
                             bg="#2c3e50", fg="white")
     percent_label.pack()
 
-    # Cập nhật phần trăm hiển thị
+
     def update_percent():
         while True:
             value = progress_var.get()
@@ -150,7 +223,7 @@ def run_simulation(state):
             time.sleep(0.05)
 
     # Chạy giả lập trong thread
-    Thread(target=compute_simulation, daemon=True).start()
+    Thread(target=compute_simulation, kwargs={"method": "rk45", "dt": 0.0001, "num_steps": 300000}, daemon=True).start()
     Thread(target=update_percent, daemon=True).start()
 
     # Hiển thị cửa sổ
