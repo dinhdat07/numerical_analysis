@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from utils import rk6_step_3D
 import tkinter as tk
-from tkinter import ttk
+from tkinter import  ttk
 from threading import Thread
+from matplotlib.widgets import Button
 
 # Constants
 G = 1.0
@@ -136,6 +137,15 @@ def run_simulation_3D(state):
             interval=10,
             repeat=True
         )
+
+        def on_back(event=None):
+            result["next"] = "replay"
+            plt.close(fig)
+
+        fig.canvas.manager.set_window_title("Three-Body Simulation")
+        back_button_ax = fig.add_axes([0.8, 0.01, 0.18, 0.05])
+        back_button = Button(back_button_ax, '← Back to Choose')
+        back_button.on_clicked(on_back)
 
         plt.show()
 
