@@ -108,12 +108,52 @@ def run_simulation(state):
 
     # loading UI
     loading = tk.Tk()
-    loading.title("Loading Simulation")
-    tk.Label(loading, text="Simulating, please wait...").pack(pady=10)
-    progress_var = tk.DoubleVar()
-    ttk.Progressbar(loading, length=300, mode='determinate', variable=progress_var).pack(pady=10)
-    Thread(target=compute_simulation, daemon=True).start()
-    loading.mainloop()
+    loading.title("Đang tải...")
+    loading.geometry("400x180")
+    loading.configure(bg="#2c3e50")  # màu nền tối
+    loading.resizable(False, False)
 
+    # Tùy chỉnh style cho Progressbar
+    style = ttk.Style()
+    style.theme_use('clam')  # dùng theme nhẹ
+    style.configure("TProgressbar",
+                    troughcolor='#34495e',
+                    background='#1abc9c',
+                    thickness=20,
+                    bordercolor='#2c3e50',
+                    relief='flat')
+
+    # Tiêu đề
+    title_label = tk.Label(loading, text="⏳ Đang xử lý, vui lòng chờ...", 
+                        font=("Segoe UI", 12, "bold"), 
+                        bg="#2c3e50", fg="white")
+    title_label.pack(pady=(30, 15))
+
+    # Thanh tiến trình
+    progress_var = tk.DoubleVar()
+    progress_bar = ttk.Progressbar(loading, length=300, mode='determinate',
+                                variable=progress_var, style="TProgressbar")
+    progress_bar.pack(pady=10)
+
+    # Phần trăm tiến trình (tuỳ chọn)
+    percent_label = tk.Label(loading, text="0%", font=("Segoe UI", 10),
+                            bg="#2c3e50", fg="white")
+    percent_label.pack()
+
+    # Cập nhật phần trăm hiển thị
+    def update_percent():
+        while True:
+            value = progress_var.get()
+            percent_label.config(text=f"{int(value)}%")
+            if value >= 100:
+                break
+            time.sleep(0.05)
+
+    # Chạy giả lập trong thread
+    Thread(target=compute_simulation, daemon=True).start()
+    Thread(target=update_percent, daemon=True).start()
+
+    # Hiển thị cửa sổ
+    loading.mainloop()
     return result["next"]
 
