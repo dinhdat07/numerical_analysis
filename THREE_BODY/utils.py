@@ -79,6 +79,7 @@ def rk4_step(state, dt):
     k2 = derivatives(state + 0.5 * dt * k1)
     k3 = derivatives(state + 0.5 * dt * k2)
     k4 = derivatives(state + dt * k3)
+
     return state + dt / 6 * (k1 + 2*k2 + 2*k3 + k4)
 
 # Hàm Runge-Kutta bậc 6
@@ -91,6 +92,37 @@ def rk6_step(state, dt):
     k6 = derivatives(state + dt * (-3*k1 + 2*k2 + 12*k3 - 12*k4 + 8*k5) / 7)
 
     return state + dt / 90 * (7*k1 + 32*k3 + 12*k4 + 32*k5 + 7*k6)
+
+def rk45_step(state, dt):
+    k1 = derivatives(state)
+    k2 = derivatives(state + dt * (1/4) * k1)
+    k3 = derivatives(state + dt * ((3/32)*k1 + (9/32)*k2))
+    k4 = derivatives(state + dt * ((1932/2197)*k1 - (7200/2197)*k2 + (7296/2197)*k3))
+    k5 = derivatives(state + dt * ((439/216)*k1 - 8*k2 + (3680/513)*k3 - (845/4104)*k4))
+    k6 = derivatives(state + dt * ((-8/27)*k1 + 2*k2 - (3544/2565)*k3 + (1859/4104)*k4 - (11/40)*k5))
+
+    y5 = state + dt * ((16/135)*k1 + (6656/12825)*k3 + (28561/56430)*k4 - (9/50)*k5 + (2/55)*k6)
+
+    y4 = state + dt * ((25/216)*k1 + (1408/2565)*k3 + (2197/4104)*k4 - (1/5)*k5)
+
+    return y4, y5
+
+def rk54_step(state, dt):
+    k1 = derivatives(state)
+    k2 = derivatives(state + dt * (1/5) * k1)
+    k3 = derivatives(state + dt * ((3/40)*k1 + (9/40)*k2))
+    k4 = derivatives(state + dt * ((44/45)*k1 - (56/15)*k2 + (32/9)*k3))
+    k5 = derivatives(state + dt * ((19372/6561)*k1 - (25360/2187)*k2 + (64448/6561)*k3 - (212/729)*k4))
+    k6 = derivatives(state + dt * ((9017/3168)*k1 - (355/33)*k2 + (46732/5247)*k3 + (49/176)*k4 - (5103/18656)*k5))
+    k7 = derivatives(state + dt * ((35/384)*k1 + (500/1113)*k3 + (125/192)*k4 - (2187/6784)*k5 + (11/84)*k6))
+
+    y5 = state + dt * ((35/384)*k1 + (500/1113)*k3 + (125/192)*k4 - (2187/6784)*k5 + (11/84)*k6)
+
+    y4 = state + dt * ((5179/57600)*k1 + (7571/16695)*k3 + (393/640)*k4 - (92097/339200)*k5 + (187/2100)*k6 + (1/40)*k7)
+
+    return y5, y4
+
+
 
 def rk6_step_3D(state, dt):
     k1 = derivatives_3D(state)
