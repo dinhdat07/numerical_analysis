@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
-from states import named_states, generate_random_state, generate_random_state_sym
+from states import named_states
 
 def generate_random_state(dim):
     size = 12 if dim == "2D" else 18
@@ -80,13 +80,14 @@ class StateSelector(ModernUI):
         super().__init__()
         self.selected_state = {"state": None, "dim": "2D"}
         self.entries = []
+        self.method = "rk4"  # Default method
         self.setup_ui()
         
     def setup_ui(self):
         # Create main window
         self.root = tk.Tk()
-        self.root.title("Three-Body Problem - Initial State Selector")
-        self.root.geometry("1100x650")  # Kích thước cửa sổ phù hợp
+        self.root.title("Three-Body Problem - Initial State & Method Selector")
+        self.root.geometry("1200x700")  # Increased height for method selection
         self.root.configure(bg=self.colors["light_bg"])
         self.root.resizable(True, True)
         
@@ -133,6 +134,7 @@ class StateSelector(ModernUI):
         
         # Create configuration sections in left panel
         self.create_dimension_section()
+        self.create_method_selection_section()  # NEW: Method selection
         self.create_state_selector_section()
         self.create_entry_grid_section()
         
@@ -159,7 +161,7 @@ class StateSelector(ModernUI):
         
         subtitle = tk.Label(
             header_frame, 
-            text="Initial State Configuration", 
+            text="Initial State Configuration & Method Selection", 
             font=("Helvetica", 12),
             bg=self.colors["primary"],
             fg=self.colors["light_text"]
@@ -214,6 +216,94 @@ class StateSelector(ModernUI):
             command=self.on_dim_change
         )
         rb_3d.pack(side=tk.LEFT)
+
+    def create_method_selection_section(self):
+        """Create the integration method selection section"""
+        method_frame = tk.Frame(
+            self.left_panel, 
+            bg="white",
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            padx=15,
+            pady=10,
+            relief=tk.FLAT
+        )
+        method_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Section header
+        header_label = tk.Label(
+            method_frame,
+            text="Step 2: Select Integration Method",
+            font=self.fonts["subheading"],
+            bg=method_frame["bg"],
+            fg=self.colors["text"]
+        )
+        header_label.pack(anchor=tk.W, pady=(0, 5))
+        
+        ttk.Separator(method_frame, orient='horizontal').pack(fill=tk.X, pady=5)
+        
+        # Method selection
+        method_combo_frame = tk.Frame(method_frame, bg=method_frame["bg"])
+        method_combo_frame.pack(fill=tk.X, pady=5)
+        
+        method_label = tk.Label(
+            method_combo_frame, 
+            text="Choose integration method:", 
+            font=self.fonts["body"],
+            bg=method_frame["bg"],
+            fg=self.colors["text"]
+        )
+        method_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Integration methods with descriptions
+        self.integration_methods = {
+            "rk4": "Runge-Kutta 4th Order (Classic, balanced accuracy/speed)",
+            "rk6": "Runge-Kutta 6th Order (Higher accuracy, more intensive)",
+            "rk45": "Runge-Kutta-Fehlberg 4(5) (Adaptive step size)",
+            "rk54": "Runge-Kutta 5(4) (Adaptive step size, higher order)"
+        }
+        
+        self.method_combo = ttk.Combobox(
+            method_combo_frame, 
+            width=35, 
+            state="readonly",
+            values=list(self.integration_methods.values())
+        )
+        self.method_combo.pack(side=tk.LEFT, padx=(0, 10))
+        self.method_combo.bind("<<ComboboxSelected>>", self.on_method_select)
+        
+        # Set default method
+        self.method_combo.set(self.integration_methods["rk4"])
+        
+        # Method description area
+        self.method_desc_frame = tk.Frame(method_frame, bg=method_frame["bg"])
+        self.method_desc_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # Selected method display
+        self.selected_method_label = tk.Label(
+            self.method_desc_frame,
+            text=f"Selected: {self.method.upper()}",
+            font=self.fonts["small"],
+            bg=self.colors["accent"],
+            fg=self.colors["light_text"],
+            padx=8,
+            pady=3,
+            relief=tk.FLAT
+        )
+        self.selected_method_label.pack(anchor=tk.W)
+        
+    def on_method_select(self, event=None):
+        """Handle method selection"""
+        selected_desc = self.method_combo.get()
+        
+        # Find the method key from the description
+        for key, desc in self.integration_methods.items():
+            if desc == selected_desc:
+                self.method = key
+                break
+        
+        # Update the selected method display
+        self.selected_method_label.config(text=f"Selected: {self.method.upper()}")
         
     def create_state_selector_section(self):
         """Create the state selection section"""
@@ -231,7 +321,7 @@ class StateSelector(ModernUI):
         # Section header
         header_label = tk.Label(
             state_frame,
-            text="Step 2: Select Predefined State",
+            text="Step 3: Select Predefined State",
             font=self.fonts["subheading"],
             bg=state_frame["bg"],
             fg=self.colors["text"]
@@ -258,7 +348,7 @@ class StateSelector(ModernUI):
         self.combo.bind("<<ComboboxSelected>>", self.on_select)
         
         # Apply button
-        apply_btn = self.create_modern_button(combo_frame, "Apply", self.succsess, self.colors["accent"])
+        apply_btn = self.create_modern_button(combo_frame, "Apply", self.success, self.colors["accent"])
         apply_btn.pack(side=tk.LEFT)
         
     def create_entry_grid_section(self):
@@ -277,7 +367,7 @@ class StateSelector(ModernUI):
         # Section header
         header_label = tk.Label(
             entry_frame,
-            text="Step 3: Manual Configuration",
+            text="Step 4: Manual Configuration",
             font=self.fonts["subheading"],
             bg=entry_frame["bg"],
             fg=self.colors["text"]
@@ -464,8 +554,6 @@ class StateSelector(ModernUI):
         # Container for actual results (initially hidden)
         self.result_container = tk.Frame(result_frame, bg=result_frame["bg"])
         
-        # We'll populate this when results are available
-        
     def update_results_view(self):
         """Update the results view with the current state"""
         # Clear existing content
@@ -481,9 +569,13 @@ class StateSelector(ModernUI):
         self.no_result_label.pack_forget()
         self.result_container.pack(fill=tk.BOTH, expand=True)
         
+        # Configuration badges
+        badges_frame = tk.Frame(self.result_container, bg=self.result_container["bg"])
+        badges_frame.pack(fill=tk.X, pady=(0, 10))
+        
         # Dimension badge
         dim_label = tk.Label(
-            self.result_container,
+            badges_frame,
             text=f"{self.selected_state['dim']} System",
             font=self.fonts["small"],
             bg=self.colors["accent"],
@@ -492,7 +584,20 @@ class StateSelector(ModernUI):
             pady=3,
             relief=tk.FLAT
         )
-        dim_label.pack(anchor=tk.W, pady=(0, 10))
+        dim_label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Method badge
+        method_label = tk.Label(
+            badges_frame,
+            text=f"Method: {self.method.upper()}",
+            font=self.fonts["small"],
+            bg=self.colors["secondary"],
+            fg=self.colors["light_text"],
+            padx=8,
+            pady=3,
+            relief=tk.FLAT
+        )
+        method_label.pack(side=tk.LEFT)
         
         # State vector display (compact)
         vector_label = tk.Label(
@@ -735,9 +840,9 @@ class StateSelector(ModernUI):
     def run(self):
         """Run the application"""
         self.root.mainloop()
-        return self.selected_state["state"], self.selected_state["dim"]
+        return self.selected_state["state"], self.selected_state["dim"], self.method
     
-    def succsess(self):
+    def success(self):
         try:
             state = []
             num_cols = 4 if self.selected_state["dim"] == "2D" else 6
@@ -754,7 +859,16 @@ class StateSelector(ModernUI):
             messagebox.showerror("Invalid Input", "Please enter valid numbers in all fields.")
 
 def choose_state():
-    """Main function to choose initial state"""
+    """Main function to choose initial state and method"""
     selector = StateSelector()
     return selector.run()
 
+# Example usage
+if __name__ == "__main__":
+    try:
+        state, dimension, method = choose_state()
+        print(f"Selected state: {state}")
+        print(f"Dimension: {dimension}")
+        print(f"Integration method: {method}")
+    except:
+        print("Application closed without selection")

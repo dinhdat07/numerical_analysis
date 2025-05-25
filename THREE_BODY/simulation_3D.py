@@ -2,55 +2,109 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from utils import rk6_step_3D
+from utils import rk6_step_3D, rk45_step_3D, rk54_step_3D, rk4_step_3D
+from utils import compute_energy_3D
 import tkinter as tk
 from tkinter import  ttk
 from threading import Thread
 from matplotlib.widgets import Button
+from ui.loading import LoadingUI
 
 # Constants
 G = 1.0
 dt = 0.0001
 num_steps = 300000
 
+rk_methods = {
+    "rk4": rk4_step_3D,
+    "rk6": rk6_step_3D,
+    "rk45": rk45_step_3D,
+    "rk54": rk54_step_3D
+}
+
 # Global simulation result
 positions = np.zeros((num_steps, 3, 3))  # [time][body][x,y,z]
-
+is_adaptive = False
 # Initial center/zoom values for animation
 prev_center = np.zeros(3)
 prev_half_range = 10.0
 prev_half_range = 10.0
 sphere_surfaces = []
 
-def run_simulation_3D(state):
+def run_simulation_3D(state, method="rk45"):
+    loading = LoadingUI()
     result = {"next": "exit"}
     state = np.array(state, dtype=np.float64).flatten()
 
-    def compute_simulation():
+    def compute_simulation(method="rk6", dt=0.0001, num_steps=300000):
         global positions
-        scale = 5
         positions = np.zeros((num_steps, 3, 3))
+        rk_step = rk_methods.get(method)
 
-        for i in range(num_steps):
-            for b in range(3):
-                positions[i, b] = state[b * 6: b * 6 + 3] * scale
-            state[:] = rk6_step_3D(state, dt)
+        if method in ["rk45", "rk54"]:
+            is_adaptive = True
+            adaptive_integrator(rk_step, t0=0, t_end=dt * num_steps, dt_init=dt)
+        else:
+            for i in range(num_steps):
+                for b in range(3):
+                    positions[i, b] = state[b * 6: b * 6 + 3] 
+                state[:] = rk6_step_3D(state, dt)
 
-            if i % 3000 == 0:
-                progress_var.set(i / num_steps * 100)
-                loading.update_idletasks()
+                if i % 3000 == 0:
+                    update_progress(i / num_steps * 100)
 
-        loading.after(100, on_finish_simulation)
+        loading.get_root().after(100, on_finish_simulation)
+
+    def adaptive_integrator(rk_step, t0, t_end, dt_init, tol=1e-6, dt_min=1e-5, dt_max=0.1, record_dt=0.0001):
+        global positions, times
+        t, dt = t0, dt_init
+        next_record_time = t0
+        adaptive_positions, adaptive_times = [], []
+
+        while t < t_end:
+            dt = min(dt, t_end - t)
+            y_high, y_low = rk_step(state, dt)
+            R = np.linalg.norm(y_high - y_low) / dt
+
+            if R <= tol or dt <= dt_min:
+                t += dt
+                state[:] = y_high
+                while next_record_time <= t:
+                    interp = (next_record_time - (t - dt)) / dt
+                    y_interp = (1 - interp) * state + interp * y_high
+
+                    # Lấy x, y, z của mỗi vật
+                    pos1 = y_interp[0:3]
+                    pos2 = y_interp[6:9]
+                    pos3 = y_interp[12:15]
+
+                    adaptive_positions.append([pos1, pos2, pos3])
+                    adaptive_times.append(next_record_time)
+                    next_record_time += record_dt
+
+            delta = 0.84 * (tol / R) ** 0.25 if R > 0 else 4
+            dt *= min(max(delta, 0.1), 4)
+            dt = max(dt_min, min(dt, dt_max))
+
+            if dt < dt_min and R > tol:
+                print("Minimum dt exceeded, stopping.")
+                break
+
+            percent = t / t_end * 100
+            update_progress(percent)
+
+        positions = np.array(adaptive_positions)  # shape: (steps, 3, 3)
+        times = np.array(adaptive_times)
 
     def on_finish_simulation():
-        loading.destroy()
+        loading.close_after_delay(100)
         show_animation()
 
     def show_animation():
         # Vẽ 3D
         fig = plt.figure(figsize=(10, 8))
+       
         ax = fig.add_subplot(111, projection='3d')
-
         ax.set_xlim(-5, 10)
         ax.set_ylim(-5, 10)
         ax.set_zlim(-5, 10)
@@ -58,9 +112,11 @@ def run_simulation_3D(state):
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.set_title("Three-Body Problem in 3D")
-
+        step = max(1, len(positions) // 1000)
+        energy_text = fig.text(0.02, 0.95, "", fontsize=10,
+                      verticalalignment='top', bbox=dict(facecolor='white', alpha=0.6))
         colors = ['orange', 'blue', 'gray']
-        sizes = [0.2, 0.1, 0.1]
+        sizes = [0.1, 0.05, 0.05]
 
         lines = [ax.plot([], [], [], color=c)[0] for c in colors]
 
@@ -126,6 +182,17 @@ def run_simulation_3D(state):
             ax.set_xlim(prev_center[0] - prev_half_range, prev_center[0] + prev_half_range)
             ax.set_ylim(prev_center[1] - prev_half_range, prev_center[1] + prev_half_range)
             ax.set_zlim(prev_center[2] - prev_half_range, prev_center[2] + prev_half_range)
+            
+            current_positions = positions[frame]
+
+            if frame > 0 and frame % step == 0:
+                if is_adaptive:
+                    dt_real = times[frame] - times[frame - 1]
+                else:
+                    dt_real = dt
+                velocities = (positions[frame] - positions[frame - 1]) / dt_real
+                energy = compute_energy_3D(current_positions, velocities)
+                energy_text.set_text(f"Energy: {energy:.6f}")
 
             return lines + sphere_surfaces
 
@@ -149,54 +216,28 @@ def run_simulation_3D(state):
 
         plt.show()
 
-    # loading UI
-    loading = tk.Tk()
-    loading.title("Đang tải...")
-    loading.geometry("400x180")
-    loading.configure(bg="#2c3e50")  # màu nền tối
-    loading.resizable(False, False)
 
-    # Tùy chỉnh style cho Progressbar
-    style = ttk.Style()
-    style.theme_use('clam')  # dùng theme nhẹ
-    style.configure("TProgressbar",
-                    troughcolor='#34495e',
-                    background='#1abc9c',
-                    thickness=20,
-                    bordercolor='#2c3e50',
-                    relief='flat')
 
-    # Tiêu đề
-    title_label = tk.Label(loading, text="⏳ Đang xử lý, vui lòng chờ...", 
-                        font=("Segoe UI", 12, "bold"), 
-                        bg="#2c3e50", fg="white")
-    title_label.pack(pady=(30, 15))
 
-    # Thanh tiến trình
-    progress_var = tk.DoubleVar()
-    progress_bar = ttk.Progressbar(loading, length=300, mode='determinate',
-                                variable=progress_var, style="TProgressbar")
-    progress_bar.pack(pady=10)
-
-    # Phần trăm tiến trình (tuỳ chọn)
-    percent_label = tk.Label(loading, text="0%", font=("Segoe UI", 10),
-                            bg="#2c3e50", fg="white")
-    percent_label.pack()
-
-    # Cập nhật phần trăm hiển thị
-    def update_percent():
-        while True:
-            value = progress_var.get()
-            percent_label.config(text=f"{int(value)}%")
-            if value >= 100:
-                break
-            time.sleep(0.05)
+    def update_progress(percent):
+        loading.update_progress(percent)
 
     # Chạy giả lập trong thread
-    Thread(target=compute_simulation, daemon=True).start()
-    Thread(target=update_percent, daemon=True).start()
-
+    Thread(target=compute_simulation, kwargs={"method": method, "dt": 0.0001, "num_steps": 300000}, daemon=True).start()
+    # Thread(target= update_progress, daemon=True).start()
     # Hiển thị cửa sổ
-    loading.mainloop()
-
+    loading.run()
     return result["next"]
+
+
+if __name__ == "__main__":
+    # Tạo state ban đầu cho 3 vật thể
+    initial_state = np.array([
+        -0.85504536,  0.50204268,  0.00267094, -0.94863563,  0.7238842,   0.82469848,
+        0.47365597, -0.62878416,  0.64240703, -0.36761325, -0.13233019,  0.6942114,
+        -0.5652762,   0.62295359, -0.51591877,  0.5598127,  -0.69730335, -0.35694745
+    ])
+    
+    print("Bắt đầu simulation...")
+    result = run_simulation_3D(initial_state)
+    print(f"Kết quả: {result}")
