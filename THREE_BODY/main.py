@@ -18,4 +18,3 @@ if __name__ == "__main__":
 
         if next_action == "exit":
             break
-

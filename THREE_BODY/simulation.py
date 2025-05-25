@@ -33,57 +33,66 @@ def run_simulation(state):
 
         if method in ["rk45", "rk54"]:
             is_adaptive = True
-            adaptive_integrator(rk_step, t0=0, t_end=dt * num_steps, dt_init=dt)
+            t = 0
+            t_end = dt * num_steps
+            dt_adapt = dt
+            tol = 1e-8
+            dt_min = 1e-8
+            dt_max = 0.01
+            record_dt = 0.0001
+            next_record_time = t
+            adaptive_positions, adaptive_times = [], []
+
+            percent_prev = 0
+
+            while t < t_end:
+                dt_adapt = min(dt_adapt, t_end - t)
+
+                prev_state = state.copy()  # Lưu trạng thái trước khi cập nhật
+                y_high, y_low = rk_step(state, dt_adapt)
+                R = np.linalg.norm(y_high - y_low) / dt_adapt
+
+                if R <= tol or dt_adapt <= dt_min:
+                    t += dt_adapt
+                    state[:] = y_high
+                    while next_record_time <= t:
+                        interp = (next_record_time - (t - dt_adapt)) / dt_adapt
+                        y_interp = (1 - interp) * prev_state + interp * y_high
+                        adaptive_positions.append([y_interp[0:2], y_interp[4:6], y_interp[8:10]])
+                        adaptive_times.append(next_record_time)
+                        next_record_time += record_dt
+
+                delta = 0.84 * (tol / R) ** 0.25 if R > 0 else 4
+                dt_adapt *= min(max(delta, 0.1), 4)
+                dt_adapt = max(dt_min, min(dt_adapt, dt_max))
+
+                if dt_adapt < dt_min and R > tol:
+                    print("Minimum dt exceeded, stopping.")
+                    break
+
+                percent = int(t / t_end * 100)
+                if percent != percent_prev:
+                    update_progress(percent)
+                    percent_prev = percent
+
+            positions = np.array(adaptive_positions)
+            times = np.array(adaptive_times)
+
         else:
             positions = np.zeros((num_steps, 3, 2))
+            percent_prev = 0
             for i in range(num_steps):
                 positions[i, 0] = state[0:2]
                 positions[i, 1] = state[4:6]
                 positions[i, 2] = state[8:10]
                 state[:] = rk_step(state, dt)
 
-                if i % 3000 == 0:
-                    percent = i / num_steps * 100
+                percent = int(i / num_steps * 100)
+                if percent != percent_prev and i % 1000 == 0:
                     update_progress(percent)
+                    percent_prev = percent
 
         loading.after(100, on_finish_simulation)
-
-    def adaptive_integrator(rk_step, t0, t_end, dt_init, tol=1e-6, dt_min=1e-5, dt_max=0.1, record_dt=0.0001):
-        global positions, times
-        t, dt = t0, dt_init
-        next_record_time = t0
-        adaptive_positions, adaptive_times = [], []
-
-        while t < t_end:
-            dt = min(dt, t_end - t)
-            y_high, y_low = rk_step(state, dt)
-            R = np.linalg.norm(y_high - y_low) / dt
-
-            if R <= tol or dt <= dt_min:
-                t += dt
-                state[:] = y_high
-                while next_record_time <= t:
-                    interp = (next_record_time - (t - dt)) / dt
-                    y_interp = (1 - interp) * state + interp * y_high
-                    adaptive_positions.append([y_interp[0:2], y_interp[4:6], y_interp[8:10]])
-                    adaptive_times.append(next_record_time)
-                    next_record_time += record_dt
-
-            delta = 0.84 * (tol / R) ** 0.25 if R > 0 else 4
-            dt *= min(max(delta, 0.1), 4)
-            dt = max(dt_min, min(dt, dt_max))
-            if dt <= dt_min:
-                print(dt)
-
-            if dt < dt_min and R > tol:
-                print("Minimum dt exceeded, stopping.")
-                break
-
-            percent = t / t_end * 100
-            update_progress(percent)
-
-        positions = np.array(adaptive_positions)
-        times = np.array(adaptive_times)
 
     def on_finish_simulation():
         loading.destroy()
@@ -185,8 +194,7 @@ def run_simulation(state):
     loading.geometry("400x180")
     loading.configure(bg="#2c3e50")  # màu nền tối
     loading.resizable(False, False)
-
-    # Tùy chỉnh style cho Progressbar
+    # Style
     style = ttk.Style()
     style.theme_use('clam')  # dùng theme nhẹ
     style.configure("TProgressbar",
@@ -195,20 +203,19 @@ def run_simulation(state):
                     thickness=20,
                     bordercolor='#2c3e50',
                     relief='flat')
-
-    # Tiêu đề
+    # Title
     title_label = tk.Label(loading, text="⏳ Đang xử lý, vui lòng chờ...", 
                         font=("Segoe UI", 12, "bold"), 
                         bg="#2c3e50", fg="white")
     title_label.pack(pady=(30, 15))
 
-    # Thanh tiến trình
+    # Progessbar
     progress_var = tk.DoubleVar()
     progress_bar = ttk.Progressbar(loading, length=300, mode='determinate',
                                 variable=progress_var, style="TProgressbar")
     progress_bar.pack(pady=10)
 
-    # Phần trăm tiến trình (tuỳ chọn)
+    # Percent
     percent_label = tk.Label(loading, text="0%", font=("Segoe UI", 10),
                             bg="#2c3e50", fg="white")
     percent_label.pack()
@@ -222,11 +229,11 @@ def run_simulation(state):
                 break
             time.sleep(0.05)
 
+
     # Chạy giả lập trong thread
     Thread(target=compute_simulation, kwargs={"method": "rk45", "dt": 0.0001, "num_steps": 300000}, daemon=True).start()
     Thread(target=update_percent, daemon=True).start()
 
     # Hiển thị cửa sổ
-    loading.mainloop()
-    return result["next"]
+    loading.mainloop() # Chờ cửa sổ loading đóng, không cần mainloop()
 

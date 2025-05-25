@@ -757,4 +757,3 @@ def choose_state():
     """Main function to choose initial state"""
     selector = StateSelector()
     return selector.run()
-
