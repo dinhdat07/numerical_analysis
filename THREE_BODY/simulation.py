@@ -1,12 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from utils import rk6_step, rk4_step, rk54_step, rk45_step, compute_energy
-import tkinter as tk
-from tkinter import ttk
 from threading import Thread
-import time
 from matplotlib.widgets import Button
+from utils import  compute_energy
+from utils import rk4_step, rk6_step, rk45_step, rk54_step
+from ui.loading import LoadingUI
 
 G = 1.0
 dt = 0.0001
@@ -24,7 +23,9 @@ times = None
 result = {"next": "exit"}
 is_adaptive = False
 
-def run_simulation(state):
+def run_simulation(state, method="rk4"):
+    loading = LoadingUI()
+
     def compute_simulation(method="rk6", dt=0.0001, num_steps=300000):
         global positions, times, is_adaptive
         rk_step = rk_methods.get(method)
@@ -92,17 +93,52 @@ def run_simulation(state):
                     update_progress(percent)
                     percent_prev = percent
 
-        loading.after(100, on_finish_simulation)
+        # Sử dụng after() để đảm bảo GUI được cập nhật từ main thread
+        loading.get_root().after(500, on_finish_simulation)
+
+    def adaptive_integrator(rk_step, t0, t_end, dt_init, tol=1e-6, dt_min=1e-5, dt_max=0.1, record_dt=0.0001):
+        global positions, times
+        t, dt = t0, dt_init
+        next_record_time = t0
+        adaptive_positions, adaptive_times = [], []
+
+        while t < t_end:
+            dt = min(dt, t_end - t)
+            y_high, y_low = rk_step(state, dt)
+            R = np.linalg.norm(y_high - y_low) / dt
+
+            if R <= tol or dt <= dt_min:
+                t += dt
+                state[:] = y_high
+                while next_record_time <= t:
+                    interp = (next_record_time - (t - dt)) / dt
+                    y_interp = (1 - interp) * state + interp * y_high
+                    adaptive_positions.append([y_interp[0:2], y_interp[4:6], y_interp[8:10]])
+                    adaptive_times.append(next_record_time)
+                    next_record_time += record_dt
+
+            delta = 0.84 * (tol / R) ** 0.25 if R > 0 else 4
+            dt *= min(max(delta, 0.1), 4)
+            dt = max(dt_min, min(dt, dt_max))
+
+            if dt < dt_min and R > tol:
+                print("Minimum dt exceeded, stopping.")
+                break
+
+            percent = t / t_end * 100
+            update_progress(percent)
+
+        positions = np.array(adaptive_positions)
+        times = np.array(adaptive_times)
 
     def on_finish_simulation():
-        loading.destroy()
+        loading.close_after_delay(100)
         show_animation()
 
     def update_progress(percent):
-        loading.after(0, lambda: (
-            progress_var.set(percent),
-            loading.update_idletasks()
-        ))
+        # Sử dụng after() để cập nhật GUI từ main thread
+        loading.update_progress(percent)
+    
 
     def show_animation():
         fig, ax = plt.subplots(figsize=(8, 8))
@@ -115,7 +151,7 @@ def run_simulation(state):
         ax.set_xlim(-2, 2)
         ax.set_ylim(-2, 2)
         ax.set_aspect('equal')
-        ax.set_title("Three-Body Problem")
+        ax.set_title(f"Three-Body Problem {method.upper()} Simulation")
         step = max(1, len(positions) // 1000)
         print(f"Total frames: {len(positions)}, Step: {step}")
 
@@ -159,7 +195,6 @@ def run_simulation(state):
                 fig.canvas.draw_idle()
                 return update_lines_and_dots(frame) + [energy_text]
             
-
             if frame > 0 and frame % step == 0:
                 if is_adaptive:
                     dt_real = times[frame] - times[frame - 1]
@@ -171,12 +206,9 @@ def run_simulation(state):
 
             return update_lines_and_dots(frame) + [energy_text]
         
-        
         ani = FuncAnimation(fig, update, frames=range(0, len(positions), step),
                             init_func=init, blit=True, interval=10, repeat=True)
         
-        
-        # Add a back button to return to the choose state screen
         def on_back(event=None):
             result["next"] = "replay"
             plt.close(fig)
@@ -188,52 +220,27 @@ def run_simulation(state):
 
         plt.show()
 
-    # loading UI
-    loading = tk.Tk()
-    loading.title("Đang tải...")
-    loading.geometry("400x180")
-    loading.configure(bg="#2c3e50")  # màu nền tối
-    loading.resizable(False, False)
-    # Style
-    style = ttk.Style()
-    style.theme_use('clam')  # dùng theme nhẹ
-    style.configure("TProgressbar",
-                    troughcolor='#34495e',
-                    background='#1abc9c',
-                    thickness=20,
-                    bordercolor='#2c3e50',
-                    relief='flat')
-    # Title
-    title_label = tk.Label(loading, text="⏳ Đang xử lý, vui lòng chờ...", 
-                        font=("Segoe UI", 12, "bold"), 
-                        bg="#2c3e50", fg="white")
-    title_label.pack(pady=(30, 15))
+    
 
-    # Progessbar
-    progress_var = tk.DoubleVar()
-    progress_bar = ttk.Progressbar(loading, length=300, mode='determinate',
-                                variable=progress_var, style="TProgressbar")
-    progress_bar.pack(pady=10)
-
-    # Percent
-    percent_label = tk.Label(loading, text="0%", font=("Segoe UI", 10),
-                            bg="#2c3e50", fg="white")
-    percent_label.pack()
-
-
-    def update_percent():
-        while True:
-            value = progress_var.get()
-            percent_label.config(text=f"{int(value)}%")
-            if value >= 100:
-                break
-            time.sleep(0.05)
-
-
-    # Chạy giả lập trong thread
-    Thread(target=compute_simulation, kwargs={"method": "rk6", "dt": 0.0001, "num_steps": 300000}, daemon=True).start()
-    Thread(target=update_percent, daemon=True).start()
+    # Chạy simulation trong thread riêng biệt
+    Thread(target=compute_simulation, kwargs={"method": method, "dt": 0.0001, "num_steps": 300000}, daemon=True).start()
 
     # Hiển thị cửa sổ
-    loading.mainloop() # Chờ cửa sổ loading đóng, không cần mainloop()
+    loading.run()
+    return result["next"]
 
+# Demo chạy thử (cần state ban đầu)
+if __name__ == "__main__":
+    # Tạo state ban đầu cho 3 vật thể
+    initial_state = np.array([
+        1.0, 0.0,    # vị trí vật thể 1 (x, y)
+        0.0, 0.5,    # vận tốc vật thể 1 (vx, vy)
+        -0.5, 0.866, # vị trí vật thể 2
+        -0.433, -0.25, # vận tốc vật thể 2
+        -0.5, -0.866, # vị trí vật thể 3
+        0.433, -0.25  # vận tốc vật thể 3
+    ])
+    
+    print("Bắt đầu simulation...")
+    result = run_simulation(initial_state)
+    print(f"Kết quả: {result}")
