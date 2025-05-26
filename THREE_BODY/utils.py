@@ -82,6 +82,14 @@ def rk4_step(state, dt):
 
     return state + dt / 6 * (k1 + 2*k2 + 2*k3 + k4)
 
+def rk4_step_3D(state, dt):
+    k1 = derivatives_3D(state)
+    k2 = derivatives_3D(state + 0.5 * dt * k1)
+    k3 = derivatives_3D(state + 0.5 * dt * k2)
+    k4 = derivatives_3D(state + dt * k3)
+
+    return state + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+
 # Hàm Runge-Kutta bậc 6
 def rk6_step(state, dt):
     k1 = derivatives(state)
@@ -132,3 +140,67 @@ def rk6_step_3D(state, dt):
     k5 = derivatives_3D(state + dt * (3 * k1 + 9 * k4) / 16)
     k6 = derivatives_3D(state + dt * (-3 * k1 + 2 * k2 + 12 * k3 - 12 * k4 + 8 * k5) / 7)
     return state + dt / 90 * (7 * k1 + 32 * k3 + 12 * k4 + 32 * k5 + 7 * k6)
+
+def rk45_step(state, dt):
+    f = derivatives
+    k1 = f(state)
+    k2 = f(state + dt * k1 / 4)
+    k3 = f(state + dt * (3*k1 + 9*k2) / 32)
+    k4 = f(state + dt * (1932*k1 - 7200*k2 + 7296*k3) / 2197)
+    k5 = f(state + dt * (439*k1 / 216 - 8*k2 + 3680*k3 / 513 - 845*k4 / 4104))
+    k6 = f(state - dt * (8*k1 / 27 - 2*k2 + 3544*k3 / 2565 - 1859*k4 / 4104 + 11*k5 / 40))
+
+    # Bậc 4
+    y4 = state + dt * (25*k1/216 + 1408*k3/2565 + 2197*k4/4104 - k5/5)
+    # Bậc 5 (dự phòng, để tính sai số nếu cần)
+    y5 = state + dt * (16*k1/135 + 6656*k3/12825 + 28561*k4/56430 - 9*k5/50 + 2*k6/55)
+
+    return y4  # y4 là kết quả bước tiếp theo theo RK45
+
+def rk45_step_3D(state, dt):
+    f = derivatives_3D
+    k1 = f(state)
+    k2 = f(state + dt * k1 / 4)
+    k3 = f(state + dt * (3*k1 + 9*k2) / 32)
+    k4 = f(state + dt * (1932*k1 - 7200*k2 + 7296*k3) / 2197)
+    k5 = f(state + dt * (439*k1 / 216 - 8*k2 + 3680*k3 / 513 - 845*k4 / 4104))
+    k6 = f(state - dt * (8*k1 / 27 - 2*k2 + 3544*k3 / 2565 - 1859*k4 / 4104 + 11*k5 / 40))
+
+    y4 = state + dt * (25*k1/216 + 1408*k3/2565 + 2197*k4/4104 - k5/5)
+    y5 = state + dt * (16*k1/135 + 6656*k3/12825 + 28561*k4/56430 - 9*k5/50 + 2*k6/55)
+
+    return y4
+
+
+def rk54_step(state, dt):
+    f = derivatives
+
+    k1 = f(state)
+    k2 = f(state + dt * k1 / 4)
+    k3 = f(state + dt * (3*k1 + 9*k2) / 32)
+    k4 = f(state + dt * (1932*k1 - 7200*k2 + 7296*k3) / 2197)
+    k5 = f(state + dt * (439*k1/216 - 8*k2 + 3680*k3/513 - 845*k4/4104))
+    k6 = f(state + dt * (-8*k1/27 + 2*k2 - 3544*k3/2565 + 1859*k4/4104 - 11*k5/40))
+
+    # Bậc 5 (RK5)
+    y5 = state + dt * (16*k1/135 + 6656*k3/12825 + 28561*k4/56430 - 9*k5/50 + 2*k6/55)
+
+    # Bậc 4 (RK4)
+    y4 = state + dt * (25*k1/216 + 1408*k3/2565 + 2197*k4/4104 - k5/5)
+
+    return y5  # hoặc y4 nếu bạn muốn dùng bậc 4
+
+
+def rk54_step_3D(state, dt):
+    f = derivatives_3D
+    k1 = f(state)
+    k2 = f(state + dt * k1 / 5)
+    k3 = f(state + dt * (3 * k1 + 9 * k2) / 40)
+    k4 = f(state + dt * (44 * k1 - 56 * k2 + 32 * k3) / 45)
+    k5 = f(state + dt * (19372 * k1 - 25360 * k2 + 64448 * k3 - 212 * k4) / 6561)
+    k6 = f(state + dt * (9017 * k1 - 355 * k2 + 46732 * k3 + 49 * k4 - 5103 * k5) / 4686)
+
+    # Bậc 4 (để tính sai số nếu cần)
+    y4 = state + dt * (35 * k1 / 384 + 500 * k3 / 1113 + 125 * k4 / 192 - 2187 * k5 / 6784 + 11 * k6 / 84)
+
+    return y4
