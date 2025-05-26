@@ -105,7 +105,7 @@ def rk45_step(state, dt):
 
     y4 = state + dt * ((25/216)*k1 + (1408/2565)*k3 + (2197/4104)*k4 - (1/5)*k5)
 
-    return y4, y5
+    return y5, y4
 
 def rk54_step(state, dt):
     k1 = derivatives(state)

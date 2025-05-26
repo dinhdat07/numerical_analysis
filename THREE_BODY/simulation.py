@@ -38,7 +38,7 @@ def run_simulation(state):
             dt_adapt = dt
             tol = 1e-8
             dt_min = 1e-8
-            dt_max = 0.01
+            dt_max = 0.001
             record_dt = 0.0001
             next_record_time = t
             adaptive_positions, adaptive_times = [], []
@@ -231,7 +231,7 @@ def run_simulation(state):
 
 
     # Chạy giả lập trong thread
-    Thread(target=compute_simulation, kwargs={"method": "rk45", "dt": 0.0001, "num_steps": 300000}, daemon=True).start()
+    Thread(target=compute_simulation, kwargs={"method": "rk6", "dt": 0.0001, "num_steps": 300000}, daemon=True).start()
     Thread(target=update_percent, daemon=True).start()
 
     # Hiển thị cửa sổ

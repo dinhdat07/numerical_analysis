@@ -1,6 +1,7 @@
 import numpy as np 
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
+from scipy import stats
 import time
 
 from utils import rk4_step, rk54_step, rk45_step, rk6_step
@@ -204,7 +205,7 @@ def plot_physical_quantities(time, E, P, L, label=None):
     plt.show()
 
 
-import time
+N_REPEAT = 1
 
 if __name__ == "__main__":
     T = 100
@@ -236,16 +237,6 @@ if __name__ == "__main__":
             1.0, 0.0, 0.080584, 0.588836,
             0.0, 0.0, -0.161168, -1.177672
         ]),
-        "Custom1": np.array([
-            -1.44332343, 0.0, -0.24852747, -0.36869087,
-            1.44332343, 0.0, -0.24852747, -0.36869087,
-            0.0, 0.0, 0.49705494, 0.73738173
-        ]),
-        "Custom2": np.array([
-            -1.14591565, 0.0, -0.22081826, -0.15568209,
-            1.14591565, 0.0, -0.22081826, -0.15568209,
-            0.0, 0.0, 0.44163652, 0.31136418
-        ]),
     }
 
     methods = {
@@ -255,45 +246,68 @@ if __name__ == "__main__":
         "RK54": (rk54_step, True),
     }
 
+    def compute_confidence_interval(values, confidence=0.95):
+        mean = np.mean(values)
+        stderr = stats.sem(values)
+        t_crit = stats.t.ppf((1 + confidence) / 2.0, df=len(values) - 1)
+        margin = t_crit * stderr
+        return mean, mean - margin, mean + margin
+
     for name, (method, is_adaptive) in methods.items():
-        print(f"\nEvaluating {name} across all states...")
-        total_errors = {
-            'L2_Energy': 0, 'Linf_Energy': 0,
-            'L2_Momentum': 0, 'Linf_Momentum': 0,
-            'L2_AngularMomentum': 0, 'Linf_AngularMomentum': 0,
+        print(f"\nEvaluating {name} across all states ({N_REPEAT} runs)...")
+
+        metrics = {
+            'L2_Energy': [], 'Linf_Energy': [],
+            'L2_Momentum': [], 'Linf_Momentum': [],
+            'L2_AngularMomentum': [], 'Linf_AngularMomentum': [],
+            'Runtime': []
         }
-        total_time = 0.0
 
-        for state_name, state0 in initial_states.items():
-            start = time.perf_counter()
+        for repeat in range(N_REPEAT):
+            total_errors = {key: 0.0 for key in metrics if key != 'Runtime'}
+            total_time = 0.0
 
-            if is_adaptive:
-                time_test, test_states = solve_adaptive(
-                    method, state0.copy(), T,
-                    dt_init=dt_test, tol=1e-7,
-                    dt_min=1e-7, dt_max=0.001, record_dt=dt_test
-                )
-            else:
-                time_test, test_states = solve_fixed(method, state0.copy(), dt_test, T)
+            for state_name, state0 in initial_states.items():
+                start = time.perf_counter()
 
-            elapsed = time.perf_counter() - start
-            total_time += elapsed
+                if is_adaptive:
+                    time_test, test_states = solve_adaptive(
+                        method, state0.copy(), T,
+                        dt_init=dt_test, tol=1e-7,
+                        dt_min=1e-7, dt_max=0.01, record_dt=dt_test
+                    )
+                else:
+                    time_test, test_states = solve_fixed(method, state0.copy(), dt_test, T)
 
-            E = compute_energy(test_states, masses)
-            P = compute_momentum(test_states, masses)
-            L = compute_angular_momentum(test_states, masses)
+                elapsed = time.perf_counter() - start
+                total_time += elapsed
 
-            errors = compute_physical_errors(time_test, E, P, L, normalize='step')
+                E = compute_energy(test_states, masses)
+                P = compute_momentum(test_states, masses)
+                L = compute_angular_momentum(test_states, masses)
+
+                errors = compute_physical_errors(time_test, E, P, L, normalize='step')
+                for k in total_errors:
+                    total_errors[k] += errors[k]
+
+            n = len(initial_states)
             for k in total_errors:
-                total_errors[k] += errors[k]
+                metrics[k].append(total_errors[k] / n)
+            metrics['Runtime'].append(total_time / n)
 
-        # Tính trung bình sai số và thời gian
-        n = len(initial_states)
-        for k in total_errors:
-            total_errors[k] /= n
-        avg_time = total_time / n
+        # Lấy trung bình qua các lần chạy
+        # for k in cumulative_errors:
+        #     cumulative_errors[k] /= N_REPEAT
+        # avg_time = cumulative_time / N_REPEAT
 
-        print(f"{name} - Mean Energy L2/step: {total_errors['L2_Energy']:.2e}, L_inf: {total_errors['Linf_Energy']:.2e}")
-        print(f"{name} - Mean Momentum L2/step: {total_errors['L2_Momentum']:.2e}, L_inf: {total_errors['Linf_Momentum']:.2e}")
-        print(f"{name} - Mean Angular Momentum L2/step: {total_errors['L2_AngularMomentum']:.2e}, L_inf: {total_errors['Linf_AngularMomentum']:.2e}")
-        print(f"{name} - Avg. runtime per state: {avg_time:.3f} seconds")
+        for k in ['L2_Energy', 'Linf_Energy', 'L2_Momentum', 'Linf_Momentum', 'L2_AngularMomentum', 'Linf_AngularMomentum']:
+            mean, ci_lower, ci_upper = compute_confidence_interval(metrics[k])
+            print(f"{name} - {k}: {mean:.2e} (95% CI: [{ci_lower:.2e}, {ci_upper:.2e}])")
+
+        mean_rt, ci_rt_l, ci_rt_u = compute_confidence_interval(metrics['Runtime'])
+        print(f"{name} - Avg. runtime per state: {mean_rt:.3f}s (95% CI: [{ci_rt_l:.3f}, {ci_rt_u:.3f}])")
+
+        # print(f"{name} - Mean Energy L2/step: {cumulative_errors['L2_Energy']:.2e}, L_inf: {cumulative_errors['Linf_Energy']:.2e}")
+        # print(f"{name} - Mean Momentum L2/step: {cumulative_errors['L2_Momentum']:.2e}, L_inf: {cumulative_errors['Linf_Momentum']:.2e}")
+        # print(f"{name} - Mean Angular Momentum L2/step: {cumulative_errors['L2_AngularMomentum']:.2e}, L_inf: {cumulative_errors['Linf_AngularMomentum']:.2e}")
+        # print(f"{name} - Avg. runtime per state: {avg_time:.3f} seconds")
