@@ -1,3 +1,4 @@
+import numpy as np
 from .precor_base import PredictorCorrectorBase
 
 
@@ -12,7 +13,8 @@ class PredictorCorrector3(PredictorCorrectorBase):
         for _ in range(max_iter):
             f_next = self._f(x_next, y_corr)
             y_new = y_vals[-1] + h * (5*f_next + 8*f_vals[-1] - f_vals[-2]) / 12
-            if abs(y_new - y_corr) < tol:
+            error = np.linalg.norm(y_new - y_corr) if isinstance(y_new, np.ndarray) else abs(y_new - y_corr)
+            if error < tol:
                 break
             y_corr = y_new
         return y_corr

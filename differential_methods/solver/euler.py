@@ -33,9 +33,12 @@ class EulerSolver:
             if hasattr(self.problem, 'f_vec'):
                 print(f"x = {float(x):.2f}, y ≈ {np.array2string(y, precision=6)}")
             else:
-                y_true = self.problem.y_exact.subs(t, x).evalf()
-                error = abs(y_true - y)
-                print(
-                    f"x = {float(x):.2f}, y ≈ {float(y):.6f}, "
-                    f"exact = {float(y_true):.6f}, error = {float(error):.2e}"
-                )
+                if self.problem.y_exact is not None:
+                    y_true = self.problem.y_exact.subs(t, x).evalf()
+                    error = abs(y_true - y)
+                    print(
+                        f"t = {x:.2f}, i ≈ {float(y):.6f}, "
+                        f"exact = {float(y_true):.6f}, error = {float(error):.2e}"
+                    )
+                else:
+                    print(f"t = {x:.2f}, i ≈ {float(y):.6f}")
